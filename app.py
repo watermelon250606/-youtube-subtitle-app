@@ -7,6 +7,7 @@ import tempfile
 import json
 from collections import OrderedDict
 import requests
+import yt_dlp
 
 app = Flask(__name__)
 CORS(app, origins=['*'])  # 모든 오리진 허용
@@ -282,11 +283,15 @@ def extract_subtitle():
     """자막 추출 API"""
     # OPTIONS 요청 처리 (CORS preflight)
     if request.method == 'OPTIONS':
-        response = app.make_default_options_response()
-        headers = response.headers
-        headers['Access-Control-Allow-Origin'] = '*'
-        headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response = app.response_class(
+            response='',
+            status=200,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+            }
+        )
         return response
     
     try:
@@ -301,73 +306,60 @@ def extract_subtitle():
         if not video_id:
             return jsonify({'error': '올바른 YouTube URL이 아닙니다.'}), 400
         
-        # yt-dlp 설치 확인
-        try:
-            subprocess.run(['yt-dlp', '--version'], 
-                         capture_output=True, text=True, shell=True, check=True)
-        except subprocess.CalledProcessError:
-            return jsonify({'error': 'yt-dlp가 설치되지 않았습니다. pip install yt-dlp로 설치해주세요.'}), 500
+        # yt-dlp 옵션 설정
+        ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['ko', 'en'],
+            'skip_download': True,
+            'subtitlesformat': 'vtt',
+        }
         
-        # 임시 디렉토리 생성
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # 자막 다운로드 명령
-            cmd = [
-                'yt-dlp',
-                '--write-subs',
-                '--write-auto-subs',
-                '--sub-langs', 'ko,en',
-                '--skip-download',
-                '--sub-format', 'vtt',
-                '-o', os.path.join(temp_dir, 'subtitle_%(id)s.%(ext)s'),
-                url
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
-            
-            if result.returncode != 0:
-                return jsonify({'error': f'자막 다운로드 실패: {result.stderr}'}), 500
-            
-            # 다운로드된 자막 파일 찾기
-            possible_files = [
-                os.path.join(temp_dir, f'subtitle_{video_id}.ko.vtt'),
-                os.path.join(temp_dir, f'subtitle_{video_id}.en.vtt'),
-                os.path.join(temp_dir, f'subtitle_{video_id}.vtt')
-            ]
-            
-            subtitle_content = None
-            language = None
-            
-            for filename in possible_files:
-                if os.path.exists(filename):
-                    with open(filename, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    
-                    # VTT에서 텍스트만 추출 - 개선된 방식
-                    subtitle_content = extract_text_from_vtt(content)
-                    
-                    # 언어 판별
-                    if '.ko.' in filename:
-                        language = '한국어 (자동 생성) - 중복 제거됨'
-                    elif '.en.' in filename:
-                        language = '영어 (자동 생성) - 중복 제거됨'
-                    else:
-                        language = '자동 생성 - 중복 제거됨'
-                    
-                    break
-            
-            if not subtitle_content:
-                return jsonify({'error': '사용 가능한 자막을 찾을 수 없습니다.'}), 404
-            
-            # 고급 텍스트 정리 (중복 제거 포함)
-            cleaned_text = advanced_clean_subtitle(subtitle_content)
-            
-            return jsonify({
-                'success': True,
-                'video_id': video_id,
-                'subtitle': cleaned_text,
-                'language': language,
-                'length': len(cleaned_text)
-            })
+        # yt-dlp로 자막 추출
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(url, download=False)
+                
+                # 자막 데이터 찾기
+                subtitles = info.get('subtitles', {}) or info.get('automatic_captions', {})
+                
+                subtitle_content = None
+                language = None
+                
+                # 한국어 자막 우선 시도
+                for lang_code in ['ko', 'en']:
+                    if lang_code in subtitles:
+                        subtitle_url = None
+                        for subtitle in subtitles[lang_code]:
+                            if subtitle['ext'] == 'vtt':
+                                subtitle_url = subtitle['url']
+                                break
+                        
+                        if subtitle_url:
+                            # 자막 내용 다운로드
+                            import urllib.request
+                            with urllib.request.urlopen(subtitle_url) as response:
+                                vtt_content = response.read().decode('utf-8')
+                                subtitle_content = extract_text_from_vtt(vtt_content)
+                                language = f"{lang_code.upper()} (자동 생성) - 중복 제거됨"
+                                break
+                
+                if not subtitle_content:
+                    return jsonify({'error': '사용 가능한 자막을 찾을 수 없습니다.'}), 404
+                
+                # 고급 텍스트 정리 (중복 제거 포함)
+                cleaned_text = advanced_clean_subtitle(subtitle_content)
+                
+                return jsonify({
+                    'success': True,
+                    'video_id': video_id,
+                    'subtitle': cleaned_text,
+                    'language': language,
+                    'length': len(cleaned_text)
+                })
+                
+            except Exception as e:
+                return jsonify({'error': f'자막 추출 실패: {str(e)}'}), 500
             
     except Exception as e:
         return jsonify({'error': f'서버 오류: {str(e)}'}), 500
