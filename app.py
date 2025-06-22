@@ -313,18 +313,37 @@ def extract_subtitle():
             'subtitleslangs': ['ko', 'en'],
             'skip_download': True,
             'subtitlesformat': 'vtt',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['webpage'],
+                }
+            },
+            'extract_flat': False,
+            'no_warnings': True,
         }
         
-        # yt-dlp로 자막 추출
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
+        # yt-dlp로 자막 추출 (여러 방법 시도)
+        subtitle_content = None
+        language = None
+        
+        # 방법 1: 일반적인 추출
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 
                 # 자막 데이터 찾기
                 subtitles = info.get('subtitles', {}) or info.get('automatic_captions', {})
-                
-                subtitle_content = None
-                language = None
                 
                 # 한국어 자막 우선 시도
                 for lang_code in ['ko', 'en']:
@@ -338,29 +357,60 @@ def extract_subtitle():
                         if subtitle_url:
                             # 자막 내용 다운로드
                             import urllib.request
-                            with urllib.request.urlopen(subtitle_url) as response:
+                            req = urllib.request.Request(subtitle_url, headers={
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                            })
+                            with urllib.request.urlopen(req) as response:
                                 vtt_content = response.read().decode('utf-8')
                                 subtitle_content = extract_text_from_vtt(vtt_content)
                                 language = f"{lang_code.upper()} (자동 생성) - 중복 제거됨"
                                 break
                 
-                if not subtitle_content:
-                    return jsonify({'error': '사용 가능한 자막을 찾을 수 없습니다.'}), 404
+        except Exception as e1:
+            # 방법 2: 안드로이드 클라이언트 우선
+            try:
+                ydl_opts_android = ydl_opts.copy()
+                ydl_opts_android['extractor_args'] = {
+                    'youtube': {
+                        'player_client': ['android'],
+                    }
+                }
                 
-                # 고급 텍스트 정리 (중복 제거 포함)
-                cleaned_text = advanced_clean_subtitle(subtitle_content)
-                
-                return jsonify({
-                    'success': True,
-                    'video_id': video_id,
-                    'subtitle': cleaned_text,
-                    'language': language,
-                    'length': len(cleaned_text)
-                })
-                
-            except Exception as e:
-                return jsonify({'error': f'자막 추출 실패: {str(e)}'}), 500
-            
+                with yt_dlp.YoutubeDL(ydl_opts_android) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    subtitles = info.get('subtitles', {}) or info.get('automatic_captions', {})
+                    
+                    for lang_code in ['ko', 'en']:
+                        if lang_code in subtitles and subtitles[lang_code]:
+                            subtitle_url = subtitles[lang_code][0]['url']
+                            
+                            import urllib.request
+                            req = urllib.request.Request(subtitle_url, headers={
+                                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+                            })
+                            with urllib.request.urlopen(req) as response:
+                                vtt_content = response.read().decode('utf-8')
+                                subtitle_content = extract_text_from_vtt(vtt_content)
+                                language = f"{lang_code.upper()} (자동 생성) - 중복 제거됨"
+                                break
+                            
+            except Exception as e2:
+                return jsonify({'error': f'YouTube 접근이 제한되었습니다. 잠시 후 다시 시도해주세요. (오류: {str(e1)}, {str(e2)})'}), 429
+        
+        if not subtitle_content:
+            return jsonify({'error': '사용 가능한 자막을 찾을 수 없습니다.'}), 404
+        
+        # 고급 텍스트 정리 (중복 제거 포함)
+        cleaned_text = advanced_clean_subtitle(subtitle_content)
+        
+        return jsonify({
+            'success': True,
+            'video_id': video_id,
+            'subtitle': cleaned_text,
+            'language': language,
+            'length': len(cleaned_text)
+        })
+        
     except Exception as e:
         return jsonify({'error': f'서버 오류: {str(e)}'}), 500
 
