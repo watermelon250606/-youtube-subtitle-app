@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 YouTube 자막 추출기</title>
+    
+    <!-- PWA 메타 태그 -->
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="자막추출">
+    <meta name="description" content="YouTube 동영상의 자막을 깔끔하게 추출하는 앱">
+    
+    <!-- PWA 매니페스트 -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- 아이콘 -->
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgZmlsbD0iIzY2N2VlYSIgcng9IjI0Ii8+CiAgPHRleHQgeD0iOTYiIHk9IjEyMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjgwIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+OrDwvdGV4dD4KPC9zdmc+">
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgZmlsbD0iIzY2N2VlYSIgcng9IjI0Ii8+CiAgPHRleHQgeD0iOTYiIHk9IjEyMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjgwIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+OrDwvdGV4dD4KPC9zdmc+">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .extract-btn {
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+
+        .extract-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .extract-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .status.loading {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+
+        .status.success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border-left: 4px solid #4caf50;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #f44336;
+        }
+
+        .result-section {
+            display: none;
+        }
+
+        .video-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .video-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 5px 0;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            color: #777;
+        }
+
+        .subtitle-text {
+            background: #fff;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            padding: 25px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 16px;
+            line-height: 1.8;
+            color: #333;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .subtitle-text::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .subtitle-text::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .subtitle-text::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+
+        .actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 12px 25px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .action-btn:disabled {
+            background: #ccc;
+            border-color: #ccc;
+            color: #999;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .ai-tips-section {
+            margin-top: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 25px;
+            color: white;
+            display: none;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .tips-header {
+            font-size: 1.3em;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .tips-content {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .tip-item {
+            margin-bottom: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            line-height: 1.5;
+        }
+
+        .tip-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .tip-item strong {
+            color: #FFE082;
+        }
+
+        .tips-footer {
+            text-align: center;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
+
+        .close-tips-btn {
+            display: block;
+            margin: 0 auto;
+            padding: 8px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .close-tips-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #1976d2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .input-group {
+                flex-direction: column;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .actions {
+                flex-direction: column;
+            }
+
+            .ai-tips-section {
+                padding: 20px;
+                margin-top: 20px;
+            }
+
+            .tips-header {
+                font-size: 1.1em;
+            }
+
+            .tip-item {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 YouTube 자막 추출기</h1>
+            <p>YouTube 동영상의 자막을 깔끔하게 추출해보세요!</p>
+        </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <input type="text" 
+                       class="url-input" 
+                       id="urlInput" 
+                       placeholder="YouTube URL을 입력하세요 (예: https://www.youtube.com/watch?v=VIDEO_ID)">
+                <button class="extract-btn" id="extractBtn" onclick="extractSubtitle()">
+                    자막 추출
+                </button>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="result-section" id="resultSection">
+            <div class="video-info" id="videoInfo">
+                <h3>📹 동영상 정보</h3>
+                <div class="info-item">
+                    <span class="info-label">비디오 ID:</span>
+                    <span class="info-value" id="videoId">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">자막 언어:</span>
+                    <span class="info-value" id="subtitleLang">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">자막 길이:</span>
+                    <span class="info-value" id="subtitleLength">-</span>
+                </div>
+            </div>
+
+            <div class="subtitle-text" id="subtitleText">
+                여기에 추출된 자막이 표시됩니다...
+            </div>
+
+            <div class="actions">
+                <button class="action-btn" onclick="copyToClipboard()">📋 복사하기</button>
+                <button class="action-btn" onclick="downloadText()">💾 다운로드</button>
+                <button class="action-btn" onclick="clearResult()">🗑️ 초기화</button>
+            </div>
+
+            <!-- AI 활용 팁 섹션 -->
+            <div class="ai-tips-section" id="aiTipsSection">
+                <div class="tips-header">
+                    🤖 복사한 자막을 AI로 활용해보세요!
+                </div>
+                <div class="tips-content">
+                    <div class="tip-item">
+                        <strong>📝 요약:</strong> "분석, 요약해줘"
+                    </div>
+                    <div class="tip-item">
+                        <strong>🔍 핵심 분석:</strong> "핵심포인트를 알려줘"
+                    </div>
+                    <div class="tip-item">
+                        <strong>❓ 질문 생성:</strong> "이 내용을 바탕으로 퀴즈 문제 만들어줘"
+                    </div>
+                    <div class="tip-item">
+                        <strong>📚 학습 가이드:</strong> "이 내용을 공부하려면 어떤 순서로 해야 할까?"
+                    </div>
+                    <div class="tip-item">
+                        <strong>💡 아이디어 확장:</strong> "이 주제와 관련된 추가 학습 자료 추천해줘"
+                    </div>
+                </div>
+                <div class="tips-footer">
+                    <small>💡 ChatGPT, Claude, Gemini 등 AI 챗봇에 붙여넣기하여 활용하세요!</small>
+                </div>
+                <button class="close-tips-btn" onclick="closeAiTips()">❌ 닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let extractedSubtitle = '';
+        let currentVideoId = '';
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        function hideStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+
+        function extractVideoId(url) {
+            const regex = /(?:v=|\/|youtu\.be\/)([0-9A-Za-z_-]{11})/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        }
+
+        async function extractSubtitle() {
+            const urlInput = document.getElementById('urlInput');
+            const extractBtn = document.getElementById('extractBtn');
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                showStatus('❌ YouTube URL을 입력해주세요!', 'error');
+                return;
+            }
+
+            const videoId = extractVideoId(url);
+            if (!videoId) {
+                showStatus('❌ 올바른 YouTube URL이 아닙니다!', 'error');
+                return;
+            }
+
+            currentVideoId = videoId;
+            extractBtn.disabled = true;
+            extractBtn.innerHTML = '<div class="spinner"></div>자막 추출 중...';
+            showStatus('⏳ YouTube 자막을 추출하고 있습니다...', 'loading');
+
+            try {
+                const response = await fetch('/extract', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResult(data.video_id, data.subtitle, data.language);
+                } else {
+                    showStatus(`❌ ${data.error}`, 'error');
+                }
+                
+            } catch (error) {
+                showStatus(`❌ 네트워크 오류: ${error.message}`, 'error');
+            } finally {
+                extractBtn.disabled = false;
+                extractBtn.innerHTML = '자막 추출';
+            }
+        }
+
+        function displayResult(videoId, subtitleText, language) {
+            extractedSubtitle = subtitleText;
+
+            document.getElementById('videoId').textContent = videoId;
+            document.getElementById('subtitleLang').textContent = language;
+            document.getElementById('subtitleLength').textContent = `${subtitleText.length}글자`;
+            document.getElementById('subtitleText').textContent = subtitleText;
+
+            document.getElementById('resultSection').style.display = 'block';
+            showStatus('✅ 자막 추출이 완료되었습니다!', 'success');
+
+            // 결과 섹션으로 스크롤
+            document.getElementById('resultSection').scrollIntoView({ 
+                behavior: 'smooth' 
+            });
+        }
+
+        function copyToClipboard() {
+            if (!extractedSubtitle) {
+                showStatus('❌ 복사할 자막이 없습니다!', 'error');
+                return;
+            }
+
+            navigator.clipboard.writeText(extractedSubtitle).then(() => {
+                showStatus('✅ 자막이 클립보드에 복사되었습니다!', 'success');
+                
+                // AI 활용 팁 표시
+                setTimeout(() => {
+                    document.getElementById('aiTipsSection').style.display = 'block';
+                    document.getElementById('aiTipsSection').scrollIntoView({ 
+                        behavior: 'smooth' 
+                    });
+                }, 1000);
+                
+                setTimeout(hideStatus, 3000);
+            }).catch(() => {
+                showStatus('❌ 복사에 실패했습니다.', 'error');
+            });
+        }
+
+        function downloadText() {
+            if (!extractedSubtitle) {
+                showStatus('❌ 다운로드할 자막이 없습니다!', 'error');
+                return;
+            }
+
+            const blob = new Blob([extractedSubtitle], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `youtube_subtitle_${currentVideoId}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showStatus('✅ 자막 파일이 다운로드되었습니다!', 'success');
+            setTimeout(hideStatus, 3000);
+        }
+
+        function clearResult() {
+            document.getElementById('resultSection').style.display = 'none';
+            document.getElementById('aiTipsSection').style.display = 'none';
+            document.getElementById('urlInput').value = '';
+            extractedSubtitle = '';
+            currentVideoId = '';
+            hideStatus();
+        }
+
+        function closeAiTips() {
+            document.getElementById('aiTipsSection').style.display = 'none';
+        }
+
+        // Enter 키로 추출 실행
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                extractSubtitle();
+            }
+        });
+
+        // 페이지 로드 시 안내 메시지
+        window.addEventListener('load', function() {
+            showStatus('💡 YouTube URL을 입력하고 "자막 추출" 버튼을 클릭해보세요!', 'loading');
+            
+            // Service Worker 등록 (PWA 기능)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker 등록 성공:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker 등록 실패:', error);
+                    });
+            }
+            
+            // PWA 설치 프롬프트
+            let deferredPrompt;
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                
+                // 설치 버튼 표시 (3초 후)
+                setTimeout(() => {
+                    if (deferredPrompt) {
+                        showInstallButton();
+                    }
+                }, 3000);
+            });
+        });
+        
+        // PWA 설치 버튼 표시
+        function showInstallButton() {
+            const installButton = document.createElement('button');
+            installButton.className = 'action-btn';
+            installButton.innerHTML = '📱 앱으로 설치';
+            installButton.style.position = 'fixed';
+            installButton.style.bottom = '20px';
+            installButton.style.right = '20px';
+            installButton.style.zIndex = '1000';
+            installButton.style.backgroundColor = '#667eea';
+            installButton.style.color = 'white';
+            installButton.style.border = 'none';
+            installButton.style.borderRadius = '25px';
+            installButton.style.padding = '15px 25px';
+            installButton.style.fontSize = '16px';
+            installButton.style.fontWeight = '600';
+            installButton.style.cursor = 'pointer';
+            installButton.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)';
+            
+            installButton.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') {
+                        showStatus('✅ 앱이 설치되었습니다!', 'success');
+                    }
+                    deferredPrompt = null;
+                    installButton.remove();
+                }
+            });
+            
+            document.body.appendChild(installButton);
+            
+            // 10초 후 자동으로 숨기기
+            setTimeout(() => {
+                if (installButton && installButton.parentNode) {
+                    installButton.remove();
+                }
+            }, 10000);
+        }
+    </script>
+</body>
+</html> 
